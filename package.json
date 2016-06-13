@@ -5,7 +5,8 @@
   "author": "First Last <first.last@example.com>",
   "main": "ls.js",
   "scripts": {
-    "start": "node ls.js"
+    "start": "node ls.js",
+    "debug": "DEBUG=* node ls.js"
   },
   "dependencies": {
     "cli.args": "0.0.7",
