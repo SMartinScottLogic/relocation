@@ -35,7 +35,7 @@ module.exports = exports = function statvfs_runner(path) {
         return r
     }
     //console.log('statvfs', path, r, vfs)
-    return {
+    return Promise.resolve({
         human: {
             block_size: filesize(vfs.f_bsize, { standard: "iec" }),
             fragment_size: filesize(vfs.f_frsize, { standard: "iec" }),
@@ -51,5 +51,5 @@ module.exports = exports = function statvfs_runner(path) {
             available: (vfs.f_bavail * vfs.f_bsize)
         },
         raw: vfs
-    }
+    })
 }
