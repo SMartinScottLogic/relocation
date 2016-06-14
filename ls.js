@@ -22,11 +22,11 @@ function get_traits( stat ) {
 }
 
 function map( filestat) {
-    console.log(filestat.filename)
+    console.log(filestat.root, filestat.filename)
     return { [filestat.filename]: true}
 }
 
-function handle_single_path( pathname ) {
+function handle_single_path( root, pathname ) {
     return new Promise( (resolve, reject) => {
         fs.readdir( pathname, (err, entries) => {
             if(err) {
@@ -34,12 +34,11 @@ function handle_single_path( pathname ) {
             }
             const promises = entries.map( (entry) => {
                 const filename = path.join( pathname, entry)
-                return Promise.resolve({filename})
-                .then( (r) => statvfs(filename).then( (vfs) => Object.assign({}, r, {vfs}) ) )
-                .then( (vfs) => stat(filename).then( (stat) => Object.assign({}, vfs, {stat} ) ) )
+                return Promise.resolve({root, filename})
+                //.then( (r) => statvfs(filename).then( (vfs) => Object.assign({}, r, {vfs}) ) )
+                .then( (results) => stat(filename).then( (stat) => Object.assign({}, vfs, {stat} ) ) )
                 .then( (results) => Object.assign({}, results, {traits: get_traits(results.stat)}) )
-                .then( (results) => (console.log(results),results))
-                .then( (results) => results.stat.isDirectory() ? handle_single_path( results.filename ).then(()=>results) : results)
+                .then( (results) => results.stat.isDirectory() ? handle_single_path( root, results.filename ).then(()=>results) : results)
                 .then( map )
             })
             return resolve(Promise.all(promises))
@@ -47,7 +46,7 @@ function handle_single_path( pathname ) {
     })
 }
 
-const promises = args.nonOpt.map( (filename) => handle_single_path(filename) )
+const promises = args.nonOpt.map( (filename) => handle_single_path(filename, filename) )
 
 Promise.all(promises)
 .then( (results) => {
