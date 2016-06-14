@@ -11,6 +11,7 @@
   "dependencies": {
     "cli.args": "0.0.7",
     "ffi": "^2.0.0",
-    "filesize": "^3.3.0"
+    "filesize": "^3.3.0",
+    "walkdir": "^0.0.11"
   }
 }
