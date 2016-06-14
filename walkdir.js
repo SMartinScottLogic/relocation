@@ -4,20 +4,29 @@ var walk = require('walkdir')
 var args = require('cli.args')()
 var path = require('path')
 
+let space = {}
 function update_stats(root, filename, stat) {
-    console.log('file', root, filename, path.relative(root, filename))
-    const paths = path.relative(root, filename).split(path.sep).reduce( (prev, cur) => {
-        console.log('debug', prev, cur)
-        if(prev.length == 0 ) {
-            prev.push(cur)
-        } else {
-            const tail = prev.slice(-1)[0]
-            prev.push( path.join(tail, cur) )
+    const size = stat.size
+
+    console.log('file', root, filename, size)
+
+    let done = false
+    const parsed = path.parse(filename)
+    path.relative(root, parsed.dir).split(path.sep).reduce((prev, cur) => {
+        if (prev.length === 0) {
+            prev.push('.')
         }
+        if(cur.length === 0) return prev
+        const tail = prev.slice(-1)[0]
+        prev.push(path.join(tail, cur))
+        if (prev.length > 2) done = true
         return prev
-    }, [])
-    console.log(paths);
-    if(paths.length > 3) process.exit(-1);
+    }, []).forEach((name) => (console.log(name), space[name] = (space[name] || 0) + size))
+
+    if (done) {
+        console.log(require('util').inspect(space, { depth: null }))
+        process.exit(-1)
+    }
 }
 
 function handle_single_path(root, pathname) {
