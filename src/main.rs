@@ -37,22 +37,12 @@ fn find_files(sourceroot: &std::ffi::OsString) -> BTreeMap<PathBuf, u64> {
         .filter(|(size, _filename)| size > &0u64)
         .map(|(size, filename)| (size, all_paths(sourceroot, &PathBuf::from(filename).parent().unwrap().to_path_buf())))
         .fold(BTreeMap::new(), |mut acc, entry| {
-            let size = entry.0;
-            let paths = entry.1;
+            let (size, paths) = entry;
             for path in paths {
-            *acc.entry(path).or_insert(0) += size;
+                *acc.entry(path).or_insert(0) += size;
             }
             acc
         })
-        /*
-        .flat_map(|(size, filename)| all_paths(sourceroot, &PathBuf::from(filename)).iter().map(move |path| (size, path)))
-        .fold(BTreeMap::new(), |mut acc, entry| {
-            let size = entry.0;
-            let path = entry.1;
-            *acc.entry(std::ffi::OsString::from(path)).or_insert(0) += size;
-            acc
-        })
-        */
 }
 
 fn main() {
