@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::io::prelude::*;
 use env_logger::{Builder,Env};
 use chrono::Local;
+use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 struct SizedFile {
@@ -16,7 +17,17 @@ struct SizedFile {
     size: u64
 }
 
-fn find_files(sourceroot: std::ffi::OsString) -> Vec<Vec<SizedFile>> {
+fn all_paths(base: &std::ffi::OsString, path: PathBuf) -> Vec<PathBuf> {
+    info!("{:?} {:?}", base, path);
+    info!("{:?}", path.strip_prefix(base).unwrap());
+    path.strip_prefix(base).unwrap().iter().fold((Vec::new(), PathBuf::from("")), |mut acc, component| {
+        acc.1.push(component);
+        acc.0.push(acc.1.clone());
+        acc
+    }).0
+}
+
+fn find_files(sourceroot: &std::ffi::OsString) -> Vec<Vec<SizedFile>> {
     info!("find all files in {:?}.", sourceroot);
 
     let walk = WalkDir::new(sourceroot).into_iter();
@@ -48,7 +59,25 @@ fn main() {
     // TODO cmd-line args
 
     let sourceroot = env::args_os().nth(1).unwrap();
-    let groups = find_files(sourceroot);
+    let groups = find_files(&sourceroot);
 
     info!("result: {:#?}", groups);
+
+    info!("test: {:#?}", all_paths(&std::ffi::OsString::from("/workspace"), PathBuf::from("/workspace/relocation/.target/test/1234")))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    
+    #[test]
+    fn all_paths() {
+        assert_eq!(
+            super::all_paths(
+                &std::ffi::OsString::from("/workspace"), 
+                PathBuf::from("/workspace/relocation/.target/test/1234")
+            ), 
+            vec!["relocation", "relocation/.target", "relocation/.target/test", "relocation/.target/test/1234"]
+            .iter().map(PathBuf::from).collect::<Vec<PathBuf>>());
+    }
 }
