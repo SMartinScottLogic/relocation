@@ -81,7 +81,10 @@ fn main() {
 }
 
 #[cfg(test)]
-#[macro_use] extern crate maplit;
+#[macro_use]
+extern crate maplit;
+
+#[cfg(test)]
 mod tests {
     use std::{path::PathBuf, collections::BTreeMap, ffi::OsString};
     
