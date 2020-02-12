@@ -35,7 +35,7 @@ fn find_files(sourceroot: &OsString) -> BTreeMap<PathBuf, u64> {
         .filter_map(Result::ok)
         .filter(|entry| entry.path().is_file())
         .map(|entry| (entry.metadata().unwrap().len(), entry.path().to_str().unwrap().to_string()))
-        .filter(|(size, _filename)| size > &0u64)
+        .filter(|(size, _filename)| size > &0_u64)
         .map(|(size, filename)| (size, all_paths(sourceroot, &PathBuf::from(filename).parent().unwrap().to_path_buf())))
         .fold(BTreeMap::new(), |mut acc, entry| {
             let (size, paths) = entry;
@@ -122,10 +122,10 @@ mod tests {
         files.insert(PathBuf::from("path2/B"), 3);
         super::merge_files(&mut all_files, &OsString::from("."), files);
         println!("{:?}", all_files);
-        assert_eq!(all_files.get(&PathBuf::from("path1")).unwrap(), &(1u64, btreemap!{OsString::from(".") => 1u64}));
-        assert_eq!(all_files.get(&PathBuf::from("path2")).unwrap(), &(10u64, btreemap!{OsString::from(".") => 10u64}));
-        assert_eq!(all_files.get(&PathBuf::from("path2/A")).unwrap(), &(7u64, btreemap!{OsString::from(".") => 7u64}));
-        assert_eq!(all_files.get(&PathBuf::from("path2/B")).unwrap(), &(3u64, btreemap!{OsString::from(".") => 3u64}));
+        assert_eq!(all_files.get(&PathBuf::from("path1")).unwrap(), &(1_u64, btreemap!{OsString::from(".") => 1_u64}));
+        assert_eq!(all_files.get(&PathBuf::from("path2")).unwrap(), &(10_u64, btreemap!{OsString::from(".") => 10_u64}));
+        assert_eq!(all_files.get(&PathBuf::from("path2/A")).unwrap(), &(7_u64, btreemap!{OsString::from(".") => 7_u64}));
+        assert_eq!(all_files.get(&PathBuf::from("path2/B")).unwrap(), &(3_u64, btreemap!{OsString::from(".") => 3_u64}));
     }
    
     #[test]
@@ -139,8 +139,8 @@ mod tests {
         files.insert(PathBuf::from("path1"), 11);
         super::merge_files(&mut all_files, &OsString::from("other"), files.clone());
         println!("{:?}", all_files);
-        assert_eq!(all_files.get(&PathBuf::from("path1")).unwrap(), &(12u64, btreemap!{OsString::from(".") => 1u64, OsString::from("other") => 11u64}));
-        assert_eq!(all_files.get(&PathBuf::from("path2")).unwrap(), &(10u64, btreemap!{OsString::from(".") => 10u64}));
+        assert_eq!(all_files.get(&PathBuf::from("path1")).unwrap(), &(12_u64, btreemap!{OsString::from(".") => 1_u64, OsString::from("other") => 11_u64}));
+        assert_eq!(all_files.get(&PathBuf::from("path2")).unwrap(), &(10_u64, btreemap!{OsString::from(".") => 10_u64}));
     }
     
     #[test]
@@ -154,9 +154,9 @@ mod tests {
         super::merge_files(&mut all_files, &OsString::from("."), files.clone());
         super::merge_files(&mut all_files, &OsString::from("."), files.clone());
         println!("{:?}", all_files);
-        assert_eq!(all_files.get(&PathBuf::from("path1")).unwrap(), &(1u64, btreemap!{OsString::from(".") => 1u64}));
-        assert_eq!(all_files.get(&PathBuf::from("path2")).unwrap(), &(10u64, btreemap!{OsString::from(".") => 10u64}));
-        assert_eq!(all_files.get(&PathBuf::from("path2/A")).unwrap(), &(7u64, btreemap!{OsString::from(".") => 7u64}));
-        assert_eq!(all_files.get(&PathBuf::from("path2/B")).unwrap(), &(3u64, btreemap!{OsString::from(".") => 3u64}));
+        assert_eq!(all_files.get(&PathBuf::from("path1")).unwrap(), &(1_u64, btreemap!{OsString::from(".") => 1_u64}));
+        assert_eq!(all_files.get(&PathBuf::from("path2")).unwrap(), &(10_u64, btreemap!{OsString::from(".") => 10_u64}));
+        assert_eq!(all_files.get(&PathBuf::from("path2/A")).unwrap(), &(7_u64, btreemap!{OsString::from(".") => 7_u64}));
+        assert_eq!(all_files.get(&PathBuf::from("path2/B")).unwrap(), &(3_u64, btreemap!{OsString::from(".") => 3_u64}));
     }
 }
