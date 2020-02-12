@@ -1,4 +1,4 @@
 tasks:
   - init: cargo build
-    command: cargo watch -x "run ."
+    command: cargo watch -x "clippy -- -W clippy::pedantic"
 image: gitpod/workspace-full

@@ -56,6 +56,17 @@ fn merge_files(all_files: &mut BTreeMap<PathBuf, (u64, BTreeMap<OsString, u64>)>
     };
 }
 
+fn remove_singletons(all_files: BTreeMap<PathBuf, (u64, BTreeMap<OsString, u64>)>) -> BTreeMap<PathBuf, (u64, BTreeMap<OsString, u64>)> {
+    all_files.into_iter().filter(|(_, v)| {
+        if v.1.len() <= 1 {
+            debug!("removing singleton {:?}", v);
+        } else {
+            debug!("retaining {:?}", v);
+        }
+        v.1.len() > 1
+    }).collect()
+}
+
 fn main() {
     let env = Env::default()
         .filter_or("RUST_LOG", "info");
@@ -77,7 +88,9 @@ fn main() {
         debug!("result: {:#?}", groups);
         merge_files(&mut all_files, &arg, groups);
     }
-    debug!("result: {:?}", all_files);
+
+    all_files = remove_singletons(all_files);
+    info!("result: {:#?}", all_files);
 }
 
 #[cfg(test)]
