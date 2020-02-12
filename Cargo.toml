@@ -11,3 +11,4 @@ log = "0.4.8"
 env_logger = "0.7.1"
 walkdir = "2"
 chrono = "0.4.10"        # Date and time library for Rust
+maplit = "1.0.2"               # Collection “literal” macros for HashMap, HashSet, BTreeMap, and BTreeSet.
