@@ -9,14 +9,18 @@ fn main() -> Result<(), std::io::Error> {
         let meta = fs::metadata(entry.path())?;
         let dev_id = meta.dev();
         println!(
-            "{} {} {:o} {:?} {} {}",
+            "{} {} {:o} {:?} {} {} (@ {})",
             dev_id,
             entry.path().display(),
             entry.metadata()?.mode(),
             entry.metadata()?.is_dir(),
             entry.metadata()?.is_file(),
-            entry.metadata()?.size()
+            entry.metadata()?.size(),
+            std::env::current_dir()?.as_path().join(entry.path()).canonicalize()?.display()
         );
+        for a in entry.path().parent().unwrap().ancestors() {
+            println!("{}", a.display());
+        }
     }
     Ok(())
 }
