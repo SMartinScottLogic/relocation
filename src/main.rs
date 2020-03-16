@@ -2,8 +2,8 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 use walkdir::WalkDir;
 
-fn main() -> Result<(), std::io::Error> {
-    let walker = WalkDir::new(".").into_iter();
+fn scan(root: &str) -> Result<(), std::io::Error> {
+    let walker = WalkDir::new(root).into_iter();
     for entry in walker {
         let entry = entry?;
         let meta = fs::metadata(entry.path())?;
@@ -18,9 +18,13 @@ fn main() -> Result<(), std::io::Error> {
             entry.metadata()?.size(),
             std::env::current_dir()?.as_path().join(entry.path()).canonicalize()?.display()
         );
-        for a in entry.path().parent().unwrap().ancestors() {
-            println!("{}", a.display());
-        }
+        println!("{:?}", entry.path().strip_prefix(root).unwrap().components());
     }
+    Ok(())
+}
+
+fn main() -> Result<(), std::io::Error> {
+    scan(".")?;
+    scan("/dev")?;
     Ok(())
 }
