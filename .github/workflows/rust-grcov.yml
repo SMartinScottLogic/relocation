@@ -34,7 +34,7 @@ jobs:
       - name: coverage-color
         uses: sergeysova/jq-action@v2
         with:
-          cmd: echo "${{ env.coverage_report }}" | jq -r '"coverage_pct=\""+.message+"\"\ncoverage_color=\""+.color+"\""' >> $GITHUB_ENV
+          cmd: echo '${{ env.coverage_report }}' | jq -r '"coverage_pct=\""+.message+"\"\ncoverage_color=\""+.color+"\""' >> $GITHUB_ENV
 
       - name: Custom badge
         uses: RubbaBoy/BYOB@v1.3.0
