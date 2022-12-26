@@ -40,7 +40,7 @@ jobs:
         uses: RubbaBoy/BYOB@v1.3.0
         with:
           NAME: coverage
-          LABEL: 'Updated at'
+          LABEL: 'Coverage'
           STATUS: ${{ env.coverage_pct }}
           COLOR: ${{ env.coverage_color }}
           ICON: 'github'
