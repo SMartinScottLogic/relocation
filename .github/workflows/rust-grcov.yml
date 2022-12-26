@@ -21,7 +21,7 @@ jobs:
       - id: coverage
         uses: actions-rs/grcov@v0.1
       - name: coverage-file
-        run: echo "coverage_report=$( ls ${{ steps.coverage.outputs.report }} )" >> $GITHUB_ENV
+        run: echo "coverage_report=$( cat ${{ steps.coverage.outputs.report }}/coverage.json )" >> $GITHUB_ENV
       - name: coverage-num
         uses: sergeysova/jq-action@v2
         with:
