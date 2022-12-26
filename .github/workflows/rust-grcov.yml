@@ -28,13 +28,16 @@ jobs:
       - name: coverage-num
         uses: sergeysova/jq-action@v2
         with:
-          cmd: echo "coverage_pct=$( cat ${{ steps.coverage.outputs.report }}/coverage.json | jq -r ".message" )" >> $GITHUB_ENV
+          cmd: |
+              echo "coverage_pct=$( cat ${{ steps.coverage.outputs.report }}/coverage.json | jq -r ".message" )" >> $GITHUB_ENV
+              echo "files=$( ls ${{ steps.coverage.outputs.report }} )" >> $GITHUB_ENV
       - name: Custom badge
         uses: RubbaBoy/BYOB@v1.3.0
         with:
           NAME: coverage
           LABEL: 'Updated at'
           STATUS: ${{ env.coverage_pct }}
-          COLOR: 00EEFF
+          COLOR: ${{ env.coverage_color }}
+          ICON: 'github'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
