@@ -30,7 +30,7 @@ jobs:
       - name: coverage-num
         uses: sergeysova/jq-action@v2
         with:
-          cmd: echo '${{ env.coverage_report }}" | jq -r '"coverage_pct="+.message' )\"" >> $GITHUB_ENV
+          cmd: echo '${{ env.coverage_report }}' | jq -r '"coverage_pct="+.message' >> $GITHUB_ENV
       - name: coverage-color
         uses: sergeysova/jq-action@v2
         with:
