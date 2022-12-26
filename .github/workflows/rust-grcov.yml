@@ -20,7 +20,7 @@ jobs:
           RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off'
       - id: coverage
         uses: actions-rs/grcov@v0.1
-      - name: Upload math result for job 2
+      - name: Upload coverage report
         uses: actions/upload-artifact@v1
         with:
           name: coverage
