@@ -25,7 +25,7 @@ jobs:
       - name: coverage-num
         uses: sergeysova/jq-action@v2
         with:
-          cmd: echo "${{ env.coverage_report }}" | jq -r '"message=\""+.message+"\"\ncolor=\""+.color+"\""' >> $GITHUB_ENV
+          cmd: echo "${{ env.coverage_report }}" | jq -r '"coverage_pct=\""+.message+"\"\ncoverage_color=\""+.color+"\""' >> $GITHUB_ENV
       - name: Upload coverage report
         uses: actions/upload-artifact@v1
         with:
