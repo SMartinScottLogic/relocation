@@ -20,10 +20,12 @@ jobs:
           RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off'
       - id: coverage
         uses: actions-rs/grcov@v0.1
+      - name: coverage-file
+        run: echo "coverage_report=$( ls ${{ steps.coverage.outputs.report }} )" >> $GITHUB_ENV
       - name: coverage-num
         uses: sergeysova/jq-action@v2
         with:
-          cmd: echo "coverage_pct=$( ls ${{ steps.coverage.outputs.report }} )" >> $GITHUB_ENV
+          cmd: echo "coverage_pct=$( echo ${{ env.coverage_report }} )" >> $GITHUB_ENV
       - name: Upload coverage report
         uses: actions/upload-artifact@v1
         with:
