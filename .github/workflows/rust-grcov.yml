@@ -26,7 +26,9 @@ jobs:
           name: coverage
           path: ${{ steps.coverage.outputs.report }}
       - name: coverage-num
-        run: echo "coverage_pct=$( cat ${{ steps.coverage.outputs.report }} | cut -c-10 )" >> $GITHUB_ENV
+        uses: sergeysova/jq-action@v2
+        with:
+          cmd: echo "coverage_pct=$( cat ${{ steps.coverage.outputs.report }}/coverage.json | jq -r ".message" )" >> $GITHUB_ENV
       - name: Custom badge
         uses: RubbaBoy/BYOB@v1.3.0
         with:
