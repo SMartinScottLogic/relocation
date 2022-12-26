@@ -20,17 +20,15 @@ jobs:
           RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off'
       - id: coverage
         uses: actions-rs/grcov@v0.1
+      - name: coverage-num
+        uses: sergeysova/jq-action@v2
+        with:
+          cmd: echo "coverage_pct=$( ls ${{ steps.coverage.outputs.report }} )" >> $GITHUB_ENV
       - name: Upload coverage report
         uses: actions/upload-artifact@v1
         with:
           name: coverage
           path: ${{ steps.coverage.outputs.report }}
-      - name: coverage-num
-        uses: sergeysova/jq-action@v2
-        with:
-          cmd: |
-              echo "coverage_pct=$( cat ${{ steps.coverage.outputs.report }}/coverage.json | jq -r ".message" )" >> $GITHUB_ENV
-              echo "files=$( ls ${{ steps.coverage.outputs.report }} )" >> $GITHUB_ENV
       - name: Custom badge
         uses: RubbaBoy/BYOB@v1.3.0
         with:
