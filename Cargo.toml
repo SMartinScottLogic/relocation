@@ -2,9 +2,18 @@
 name = "relocation"
 version = "0.1.0"
 authors = ["Simon Martin <smartin@scottlogic.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+log = "0.4.8"
+env_logger = "0.10.0"
+chrono = "0.4.10"        # Date and time library for Rust
+# A simple to use, efficient, and full-featured Command Line Argument Parser
+clap = { version = "3.2", features = ["derive"] }
+
 walkdir = "2.3.1"      # Recursively walk a directory.
+itertools = "0.10"         # Extra iterator adaptors, iterator methods, free functions, and macros.
+num-format = "0.4.3"
+pathfinding = "4.2.0"
