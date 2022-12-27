@@ -392,6 +392,7 @@ dependencies = [
  "clap",
  "env_logger",
  "itertools",
+ "libc",
  "log",
  "num-format",
  "pathfinding",

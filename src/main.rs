@@ -3,8 +3,7 @@ extern crate log;
 
 use chrono::Local;
 use clap::StructOpt;
-use log::{error, info, debug};
-use pathfinding::prelude::idastar;
+use log::debug;
 use relocation::State;
 use std::io::Write;
 
@@ -40,7 +39,6 @@ fn main() -> Result<(), std::io::Error> {
     debug!("initially: {initial:#?}");
 
     let (moves, _cost) = initial.relocate().unwrap_or_default();
-
     if config.execute {
         for m in moves {
             println!("Move {:?} to {:?}", m.source, m.target);
