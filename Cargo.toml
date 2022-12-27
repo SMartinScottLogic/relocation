@@ -14,8 +14,6 @@ chrono = "0.4.10"        # Date and time library for Rust
 clap = { version = "3.2", features = ["derive"] }
 
 walkdir = "2.3.1"      # Recursively walk a directory.
-itertools = "0.10"         # Extra iterator adaptors, iterator methods, free functions, and macros.
-num-format = "0.4.3"
 pathfinding = "4.2.0"
 
 # Raw FFI bindings to platform libraries like libc. 

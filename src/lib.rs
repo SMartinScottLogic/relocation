@@ -23,7 +23,6 @@ pub struct Config {
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct State {
     roots: HashMap<std::path::PathBuf, (u64, u64, u64)>,
-    total_entries: u64,
     entries: Vec<Entry>,
     usage: HashMap<PathBuf, HashMap<PathBuf, u64>>,
 }
@@ -52,7 +51,6 @@ impl State {
 
 impl State {
     pub fn relocate(&self) -> Option<(Vec<Move>, u64)> {
-        println!("total entries: {}", self.total_entries);
         let r = idastar(self, |s| s.successors(), |s| s.heuristic(), |s| s.success());
         if r.is_none() {
             error!("No complete relocation found. Possibly try each subdir in turn.");
@@ -102,7 +100,7 @@ impl State {
 
 impl State {
     fn successors(&self) -> Box<dyn Iterator<Item = (State, u64)>> {
-        if self.total_entries > 100000 {
+        if self.entries.len() > 100000 {
             // TODO Lazy resolution of successors
             panic!("Too many entries");
             // let successors = LazySuccessors::new(self);
@@ -177,7 +175,6 @@ impl State {
                     // Add new state to results
                     let new_state = State {
                         entries: new_entries,
-                        total_entries: self.total_entries,
                         roots,
                         usage,
                     };
@@ -278,7 +275,6 @@ impl State {
             size,
         };
         self.entries.push(entry);
-        self.total_entries += 1;
     }
 
     fn scan(&mut self, root: &str) {
