@@ -9,7 +9,8 @@ edition = "2021"
 [dependencies]
 log = "0.4.8"
 env_logger = "0.10.0"
-chrono = "0.4.10"        # Date and time library for Rust
+# Date and time library for Rust
+chrono = { version = "0.4.10", default-features = false, features = ["clock", "std"] }
 # A simple to use, efficient, and full-featured Command Line Argument Parser
 clap = { version = "3.2", features = ["derive"] }
 
