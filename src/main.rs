@@ -1,35 +1,16 @@
 extern crate env_logger;
 extern crate log;
 
-use chrono::Local;
 use clap::StructOpt;
 use log::debug;
 use relocation::State;
-use std::io::Write;
 
-use env_logger::{Builder, Env};
-
-use relocation::Config;
-
-fn setup_logger() {
-    let env = Env::default().filter_or("RUST_LOG", "info");
-    Builder::from_env(env)
-        .format(|buf, record| {
-            writeln!(
-                buf,
-                "{} [{}] - {}",
-                Local::now().format("%Y-%m-%dT%H:%M:%S"),
-                record.level(),
-                record.args()
-            )
-        })
-        .init();
-}
+use relocation::{setup_logger, Config};
 
 fn main() -> Result<(), std::io::Error> {
     let config = Config::parse();
 
-    setup_logger();
+    setup_logger(false);
 
     let mut initial = State::default();
     for root in &config.root {

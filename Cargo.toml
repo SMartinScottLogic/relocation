@@ -19,3 +19,6 @@ pathfinding = "4.2.0"
 
 # Raw FFI bindings to platform libraries like libc. 
 libc = "0.2"
+
+[dev-dependencies]
+ctor = "0.1.26"
