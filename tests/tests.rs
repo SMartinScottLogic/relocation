@@ -1,10 +1,6 @@
-use std::{
-    fs,
-    io::{self, ErrorKind},
-    path::{Path, PathBuf},
-};
+use std::{fs, io, path::PathBuf};
 
-use relocation::Move;
+use relocation::{Move, State};
 use walkdir::WalkDir;
 
 fn setup(test_dir: &str, files: &[(&str, &str)]) -> io::Result<()> {
@@ -54,7 +50,7 @@ fn one_dir() -> io::Result<()> {
         ],
     )?;
 
-    let mut state = relocation::State::default();
+    let mut state = State::default();
     state += test_dir.to_string() + "/b";
 
     assert_eq!(None, state.relocate());
@@ -89,7 +85,7 @@ fn two_dirs() -> io::Result<()> {
     assert!(r.is_some());
     let (moves, cost) = r.unwrap();
     println!("{cost}: {moves:?}");
-    assert_eq!(8192, cost);
+    assert_eq!(14, cost);
     assert_eq!(2, moves.len());
 
     let full_test_dir = PathBuf::from(test_dir).canonicalize().unwrap();

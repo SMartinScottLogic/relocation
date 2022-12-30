@@ -9,14 +9,16 @@ edition = "2021"
 [dependencies]
 log = "0.4.8"
 env_logger = "0.10.0"
-chrono = "0.4.10"        # Date and time library for Rust
+# Date and time library for Rust
+chrono = { version = "0.4.10", default-features = false, features = ["clock", "std"] }
 # A simple to use, efficient, and full-featured Command Line Argument Parser
 clap = { version = "3.2", features = ["derive"] }
 
 walkdir = "2.3.1"      # Recursively walk a directory.
-itertools = "0.10"         # Extra iterator adaptors, iterator methods, free functions, and macros.
-num-format = "0.4.3"
 pathfinding = "4.2.0"
 
 # Raw FFI bindings to platform libraries like libc. 
 libc = "0.2"
+
+[dev-dependencies]
+ctor = "0.1.26"
