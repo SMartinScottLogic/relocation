@@ -28,6 +28,10 @@ impl FileSystem {
     pub fn free_bytes(&self) -> u64 {
         self.block_size.saturating_mul(self.blocks_available)
     }
+
+    pub fn scratch(&self) -> bool {
+        self.scratch
+    }
 }
 
 impl FileSystem {

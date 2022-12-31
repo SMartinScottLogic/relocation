@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use log::{debug, info};
+use log::debug;
 
 use crate::{filesystem::FileSystem, Entry, State};
 
@@ -23,7 +23,7 @@ pub struct LazySuccessors {
 
 impl From<&State> for LazySuccessors {
     fn from(state: &State) -> Self {
-        info!("LazySuccessors::from({state:?})");
+        debug!("LazySuccessors::from({state:?})");
         let roots = state
             .roots
             .iter()
@@ -67,7 +67,7 @@ impl Iterator for LazySuccessors {
             let cur_root = self.roots.get(self.cur_root_idx);
             self.cur_root_idx += 1;
             if let Some(cur_root) = cur_root {
-                // TODO skip if insufficient space in 'cur_root'
+                // Skip if insufficient space in 'cur_root'
                 if cur_root.1.blocks_available < cur_root.1.blocks(cur_entry.size) {
                     debug!(
                         "Cannot move {:?} to {:?} ({} of {} blocks available)",
@@ -91,7 +91,7 @@ impl Iterator for LazySuccessors {
             }
         };
         debug!("{:?} {:?} {:?}", cur_entry, cur_root, self.roots);
-        info!(
+        debug!(
             "move {:?} to {:?}",
             cur_entry
                 .root
@@ -118,7 +118,7 @@ impl LazySuccessors {
             .cloned()
             .collect::<Vec<_>>();
         let effective_size = other_filesystem.effective_size(entry.size);
-        info!(
+        debug!(
             "Candidate: move {:?} to {:?} (cost {} for {:?})",
             entry.root.join(&entry.subdir).join(entry.subpath.clone()),
             other_root.join(&entry.subdir).join(entry.subpath.clone()),
@@ -140,9 +140,9 @@ impl LazySuccessors {
             debug!("consumed {} blocks from {:?}", consumed_blocks, other_root);
             fs.blocks_available -= consumed_blocks;
         });
-        info!("- new roots: {roots:?}");
+        debug!("- new roots: {roots:?}");
         // Modify usage
-        info!("usage was: {usage:?}");
+        debug!("usage was: {usage:?}");
         let mut usage = usage.to_owned();
         *usage
             .entry(entry.subdir.to_owned())
@@ -154,7 +154,7 @@ impl LazySuccessors {
             .or_default()
             .entry(other_root.to_path_buf())
             .or_default() += 1;
-        info!("usage now: {usage:?}");
+        debug!("usage now: {usage:?}");
         // Resultant state
         let mut entry = entry.to_owned();
         entry.root = other_root.to_owned();

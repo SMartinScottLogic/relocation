@@ -11,6 +11,9 @@ pub struct Config {
     /// Should plan be executed
     #[clap(long)]
     pub execute: bool,
+    /// Path to use for temporary storage
+    #[clap(long)]
+    pub scratch: Vec<String>,
 }
 
 pub fn setup_logger(is_test: bool) {

@@ -16,6 +16,9 @@ fn main() -> Result<(), std::io::Error> {
     for root in &config.root {
         initial += root;
     }
+    for scratch in &config.scratch {
+        initial.scan(scratch, true);
+    }
 
     debug!("initially: {initial:#?}");
 
