@@ -1,6 +1,8 @@
 use std::path::Path;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+use deepsize::DeepSizeOf;
+
+#[derive(Debug, PartialEq, Eq, Clone, DeepSizeOf)]
 pub struct FileSystem {
     id: u64,
     block_size: u64,
@@ -60,6 +62,7 @@ impl FileSystem {
 impl From<(&Path, bool)> for FileSystem {
     fn from((root, is_scratchpad): (&Path, bool)) -> Self {
         let (fsid, bsize, bavail) = Self::stats(root).unwrap();
+        let bavail = bavail + (1_000_000);
         Self::new(fsid, bsize, bavail, is_scratchpad)
     }
 }

@@ -15,6 +15,7 @@ use crate::{
 };
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[deprecated]
 pub struct State {
     pub(crate) roots: Vec<(std::path::PathBuf, FileSystem)>,
     pub(crate) subdirs: Vec<PathBuf>,
@@ -77,12 +78,22 @@ impl State {
                 let src = a
                     .entries
                     .iter()
-                    .map(|e| a.roots[e.root_idx].0.join(&a.subdirs[e.subdir_idx]).join(&e.subpath))
+                    .map(|e| {
+                        a.roots[e.root_idx]
+                            .0
+                            .join(&a.subdirs[e.subdir_idx])
+                            .join(&e.subpath)
+                    })
                     .collect::<HashSet<_>>();
                 let tgt = b
                     .entries
                     .iter()
-                    .map(|e| b.roots[e.root_idx].0.join(&b.subdirs[e.subdir_idx]).join(&e.subpath))
+                    .map(|e| {
+                        b.roots[e.root_idx]
+                            .0
+                            .join(&b.subdirs[e.subdir_idx])
+                            .join(&e.subpath)
+                    })
                     .collect::<HashSet<_>>();
                 let only_src = src.difference(&tgt).next().unwrap();
                 let only_tgt = tgt.difference(&src).next().unwrap();
@@ -229,13 +240,14 @@ impl State {
     fn heuristic(&self) -> u64 {
         let mut total = 0;
         for subdir in self.usage.keys() {
-            let v = self.entries.iter().filter(|e| e.subdir_idx == *subdir).fold(
-                HashMap::new(),
-                |mut acc, entry| {
+            let v = self
+                .entries
+                .iter()
+                .filter(|e| e.subdir_idx == *subdir)
+                .fold(HashMap::new(), |mut acc, entry| {
                     *acc.entry(entry.root_idx).or_insert(0_u64) += entry.size;
                     acc
-                },
-            );
+                });
             if v.is_empty() {
                 info!("entries: {:?}", self.entries);
                 info!("usage: {:?}", self.usage);
@@ -386,11 +398,11 @@ impl State {
             } else {
                 PathBuf::from(c.as_os_str())
             };
-            let subdir_idx = match self.subdirs.iter().position(|v| *v==subdir) {
+            let subdir_idx = match self.subdirs.iter().position(|v| *v == subdir) {
                 Some(idx) => idx,
                 None => {
                     self.subdirs.push(subdir.clone());
-                    self.subdirs.iter().position(|v| *v==subdir).unwrap()
+                    self.subdirs.iter().position(|v| *v == subdir).unwrap()
                 }
             };
             let subpath = entry.path().strip_prefix(root.join(&subdir)).unwrap();
@@ -540,8 +552,8 @@ mod test {
                 )
             })
             .collect();
-            let subdirs = vec![PathBuf::from("A"), PathBuf::from("B"), PathBuf::from("C")];
-            let entries = vec![
+        let subdirs = vec![PathBuf::from("A"), PathBuf::from("B"), PathBuf::from("C")];
+        let entries = vec![
             Entry {
                 size: 10,
                 root_idx: 0,

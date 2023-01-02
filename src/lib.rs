@@ -1,6 +1,7 @@
 use chrono::Local;
 use clap::Parser;
 use env_logger::{Builder, Env};
+use log::error;
 use std::io::Write;
 
 #[derive(Debug, Clone, Parser)]
@@ -18,7 +19,7 @@ pub struct Config {
 
 pub fn setup_logger(is_test: bool) {
     let env = Env::default().filter_or("RUST_LOG", "info");
-    Builder::from_env(env)
+    if let Err(e) = Builder::from_env(env)
         .format(|buf, record| {
             writeln!(
                 buf,
@@ -29,10 +30,13 @@ pub fn setup_logger(is_test: bool) {
             )
         })
         .is_test(is_test)
-        .init();
+        .try_init()
+    {
+        error!("Failed to initialise env logger: {e:?}");
+    };
 }
 
 mod filesystem;
 mod state;
 
-pub use state::{Entry, Move, State};
+pub use state::{Entry, Move, NewMove, NewState, OverlayState, State, StateNames};

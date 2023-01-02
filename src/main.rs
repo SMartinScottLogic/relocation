@@ -3,7 +3,7 @@ extern crate log;
 
 use clap::StructOpt;
 use log::debug;
-use relocation::State;
+use relocation::{NewState, OverlayState, StateNames};
 
 use relocation::{setup_logger, Config};
 
@@ -12,20 +12,21 @@ fn main() -> Result<(), std::io::Error> {
 
     setup_logger(false);
 
-    let mut initial = State::default();
+    let mut names = StateNames::default();
+    let mut initial = OverlayState::default();
     for root in &config.root {
-        initial += root;
+        initial.scan(&mut names, root, false);
     }
     for scratch in &config.scratch {
-        initial.scan(scratch, true);
+        initial.scan(&mut names, scratch, true);
     }
 
-    debug!("initially: {initial:#?}");
+    debug!("initially: {initial:#?}, names: {names:?}");
 
     let (moves, _cost) = initial.relocate().unwrap_or_default();
     if config.execute {
         for m in moves {
-            println!("Move {:?} to {:?}", m.source, m.target);
+            println!("Move {:?}", m);
         }
     }
     Ok(())
