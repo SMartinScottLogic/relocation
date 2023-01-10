@@ -2,14 +2,16 @@ use std::{collections::HashMap, path::PathBuf};
 
 use log::debug;
 
-use crate::{filesystem::FileSystem, Entry, State};
+use crate::{filesystem::FileSystem, NewState};
+
+use super::NewEntry;
 
 #[derive(Debug)]
 pub struct LazySuccessors {
-    roots: Vec<(PathBuf, FileSystem)>,
-    subdirs: Vec<PathBuf>,
-    entries: Vec<Entry>,
-    usage: HashMap<usize, HashMap<usize, u64>>,
+    roots: Vec<FileSystem>,
+    //subdirs: Vec<PathBuf>,
+    entries: Vec<NewEntry>,
+    usage: HashMap<(usize, usize), u64>,
     cur_entry_idx: usize,
     cur_root_idx: usize,
     //state: State,
@@ -22,11 +24,11 @@ pub struct LazySuccessors {
     // root_iter: std::collections::hash_map::Iter<'a, PathBuf, FileSystem>,
 }
 
-impl From<&State> for LazySuccessors {
-    fn from(state: &State) -> Self {
+impl From<&NewState> for LazySuccessors {
+    fn from(state: &NewState) -> Self {
         debug!("LazySuccessors::from({state:?})");
         let roots = state.roots.clone();
-        let subdirs = state.subdirs.clone();
+        //let subdirs = state.subdirs.clone();
         let entries = state.entries.clone();
         let usage = state.usage.clone();
         Self {
@@ -34,7 +36,7 @@ impl From<&State> for LazySuccessors {
             cur_entry_idx: 0,
             cur_root_idx: 0,
             roots,
-            subdirs,
+            //subdirs,
             entries,
             usage,
         }
@@ -58,7 +60,7 @@ impl From<&State> for LazySuccessors {
 }
 
 impl Iterator for LazySuccessors {
-    type Item = (State, u64);
+    type Item = (NewState, u64);
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut cur_entry = self.entries.get(self.cur_entry_idx)?;
@@ -66,7 +68,7 @@ impl Iterator for LazySuccessors {
             let cur_root_idx = self.cur_root_idx;
             let cur_root = self.roots.get(self.cur_root_idx);
             self.cur_root_idx += 1;
-            if let Some((cur_root, fs)) = cur_root {
+            if let Some(fs) = cur_root {
                 // Skip if insufficient space in 'cur_root'
                 if fs.blocks_available < fs.blocks(cur_entry.size) {
                     debug!(
@@ -91,19 +93,11 @@ impl Iterator for LazySuccessors {
             }
         };
         debug!("{:?} {:?} {:?}", cur_entry, cur_root_idx, self.roots);
-        debug!(
-            "move {:?} to {:?}",
-            self.roots[cur_entry.root_idx]
-                .0
-                .join(self.subdirs.get(cur_entry.subdir_idx).unwrap())
-                .join(&cur_entry.subpath),
-            self.roots[cur_root_idx].0.clone()
-        );
+        debug!("move {:?} to {:?}", cur_entry, cur_root_idx);
         let state = Self::new_state(
             cur_entry,
             &self.entries,
             &self.roots,
-            &self.subdirs,
             cur_root_idx,
             &self.usage,
         );
@@ -113,13 +107,12 @@ impl Iterator for LazySuccessors {
 
 impl LazySuccessors {
     fn new_state(
-        entry: &Entry,
-        entries: &[Entry],
-        roots: &[(PathBuf, FileSystem)],
-        subdirs: &[PathBuf],
+        entry: &NewEntry,
+        entries: &[NewEntry],
+        roots: &[FileSystem],
         other_root_idx: usize,
-        usage: &HashMap<usize, HashMap<usize, u64>>,
-    ) -> State {
+        usage: &HashMap<(usize, usize), u64>,
+    ) -> NewState {
         let mut entries = entries
             .iter()
             .filter(|e| *e != entry)
@@ -130,41 +123,32 @@ impl LazySuccessors {
         debug!("original roots: {roots:?}");
         {
             // freeing of blocks
-            let root = roots.get_mut(entry.root_idx).unwrap();
-            let freed_blocks = root.1.blocks(entry.size);
-            debug!("freed {} blocks from {:?}", freed_blocks, root.0);
-            root.1.blocks_available += freed_blocks;
+            let fs = roots.get_mut(entry.root_idx).unwrap();
+            let freed_blocks = fs.blocks(entry.size);
+            debug!("freed {} blocks from {:?}", freed_blocks, fs);
+            fs.blocks_available += freed_blocks;
         }
         {
             // consumption of blocks
-            let root = roots.get_mut(other_root_idx).unwrap();
-            let freed_blocks = root.1.blocks(entry.size);
-            debug!("consumed {} blocks from {:?}", freed_blocks, root.0);
-            root.1.blocks_available += freed_blocks;
+            let fs = roots.get_mut(other_root_idx).unwrap();
+            let freed_blocks = fs.blocks(entry.size);
+            debug!("consumed {} blocks from {:?}", freed_blocks, fs);
+            fs.blocks_available += freed_blocks;
         }
         debug!("- new roots: {roots:?}");
         // Modify usage
         debug!("usage was: {usage:?}");
         let mut usage = usage.to_owned();
-        *usage
-            .entry(entry.subdir_idx)
-            .or_default()
-            .entry(entry.root_idx)
-            .or_default() -= 1;
-        *usage
-            .entry(entry.subdir_idx)
-            .or_default()
-            .entry(other_root_idx)
-            .or_default() += 1;
+        *usage.entry((entry.subdir_idx, entry.root_idx)).or_default() -= 1;
+        *usage.entry((entry.subdir_idx, other_root_idx)).or_default() += 1;
         debug!("usage now: {usage:?}");
         // Resultant state
         let mut entry = entry.to_owned();
         entry.root_idx = other_root_idx;
         entries.push(entry);
 
-        State {
+        NewState {
             roots,
-            subdirs: subdirs.to_owned(),
             entries,
             usage,
         }
