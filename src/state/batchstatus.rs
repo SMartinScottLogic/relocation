@@ -121,42 +121,26 @@ impl OverlayState {
             })
             .collect::<Vec<_>>();
         Vec::new()
-        // let it1 = states.iter().skip(1);
-        // states
-        //     .iter()
-        //     .zip(it1)
-        //     .map(|(a, b)| {
-        //         let src = a
-        //             .overlay_entries
-        //             .iter()
-        //             .map(|e| e.to_owned())
-        //             .collect::<HashSet<_>>();
-        //         let tgt = b
-        //             .overlay_entries
-        //             .iter()
-        //             .map(|e| e.to_owned())
-        //             .collect::<HashSet<_>>();
-        //         let only_src = src.difference(&tgt).next().unwrap();
-        //         let only_tgt = tgt.difference(&src).next().unwrap();
-        //         Move {
-        //             // source: only_src.clone(),
-        //             // target: only_tgt.clone(),
-        //         }
-        //     })
-        //     .collect::<Vec<_>>()
     }
 }
 
 impl OverlayState {
     fn new_state(
-        entry_idx: usize,
+        entry_indices: &[usize],
         initial_entries: Rc<RefCell<Vec<Entry>>>,
         overlay_entries: &HashMap<usize, DeltaEntry>,
         roots: &[FileSystem],
         other_root_idx: usize,
         usage: &HashMap<(usize, usize), u64>,
     ) -> OverlayState {
-        let entry = initial_entries.borrow()[entry_idx].to_owned();
+        let mut roots = roots.to_owned();
+        let mut overlay_entries = overlay_entries.to_owned();
+        debug!("original roots: {roots:?}");
+        debug!("original usage: {usage:?}");
+        let mut usage = usage.to_owned();
+
+        for entry_idx in entry_indices {
+        let entry = initial_entries.borrow()[*entry_idx].to_owned();
         debug!(
             "Move entry {}:{:?}:{:?} to {}",
             entry_idx,
@@ -172,8 +156,6 @@ impl OverlayState {
             .unwrap_or_else(|| entry.root_idx);
         assert_ne!(current_root_idx, other_root_idx);
         // Modify free blocks in roots
-        let mut roots = roots.to_owned();
-        debug!("original roots: {roots:?}");
         {
             // freeing of blocks
             let root = roots.get_mut(current_root_idx).unwrap();
@@ -188,26 +170,23 @@ impl OverlayState {
             debug!("consumed {} blocks from {:?}", freed_blocks, root);
             root.blocks_available -= freed_blocks;
         }
-        debug!("new roots: {roots:?}");
         // Modify usage
-        let mut usage = usage.to_owned();
-        debug!(
-            "original usage: {usage:?}; transfer from ({},{}) to ({},{})",
+        debug!("transfer from ({},{}) to ({},{})",
             subdir_idx, current_root_idx, subdir_idx, other_root_idx
         );
         *usage.entry((subdir_idx, current_root_idx)).or_default() -= 1;
         *usage.entry((subdir_idx, other_root_idx)).or_default() += 1;
-        //usage[entry.subpath_idx][entry.root_idx] -= 1;
-        //usage[entry.subpath_idx][other_root_idx] += 1;
-        debug!("new usage: {usage:?}");
         // Resultant state
-        let mut overlay_entries = overlay_entries.to_owned();
         overlay_entries
-            .entry(entry_idx)
+            .entry(*entry_idx)
             .or_insert_with(|| DeltaEntry {
                 root_idx: current_root_idx,
             })
             .root_idx = other_root_idx;
+        }
+
+        debug!("new roots: {roots:?}");
+        debug!("new usage: {usage:?}");
 
         OverlayState {
             roots,
@@ -252,7 +231,7 @@ impl OverlayState {
                     }
                     let cost = entry.size;
                     let new_state = Self::new_state(
-                        entry_idx,
+                        &[entry_idx],
                         self.initial_entries.clone(),
                         &self.overlay_entries,
                         &self.roots,

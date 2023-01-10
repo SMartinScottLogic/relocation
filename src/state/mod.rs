@@ -4,6 +4,7 @@ mod newlazyiter;
 mod newstatus;
 mod overlaystatus;
 mod status;
+mod batchstatus;
 
 pub use basiciter::{ExistingSuccessors, NewExistingSuccessors, OverlayExistingSuccessors};
 pub use lazyiter::LazySuccessors;

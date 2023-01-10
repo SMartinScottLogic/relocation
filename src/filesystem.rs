@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use deepsize::DeepSizeOf;
+use log::{info, debug};
 
 #[derive(Debug, PartialEq, Eq, Clone, DeepSizeOf)]
 pub struct FileSystem {
@@ -51,7 +52,9 @@ impl FileSystem {
             let mut stat: libc::statvfs = std::mem::zeroed();
             let mount_point_cpath = Self::to_cpath(mount_point);
             if libc::statvfs(mount_point_cpath.as_ptr() as *const _, &mut stat) == 0 {
+                debug!("{mount_point:?}: {stat:?}");
                 Some((stat.f_fsid, stat.f_bsize, stat.f_bavail))
+                //Some((stat.f_fsid, stat.f_bsize, stat.f_bfree))
             } else {
                 None
             }
@@ -62,7 +65,7 @@ impl FileSystem {
 impl From<(&Path, bool)> for FileSystem {
     fn from((root, is_scratchpad): (&Path, bool)) -> Self {
         let (fsid, bsize, bavail) = Self::stats(root).unwrap();
-        let bavail = bavail + (1_000_000);
+        //let bavail = bavail + (1_000_000);
         Self::new(fsid, bsize, bavail, is_scratchpad)
     }
 }
