@@ -20,5 +20,8 @@ pathfinding = "4.2.0"
 # Raw FFI bindings to platform libraries like libc. 
 libc = "0.2"
 
+# A crate for measuring the total size of object on the stack and heap
+deepsize = "0.2.0"
+
 [dev-dependencies]
 ctor = "0.1.26"

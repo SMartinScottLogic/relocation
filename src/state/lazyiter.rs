@@ -1,14 +1,15 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use log::{debug, info};
+use log::debug;
 
 use crate::{filesystem::FileSystem, Entry, State};
 
 #[derive(Debug)]
 pub struct LazySuccessors {
     roots: Vec<(PathBuf, FileSystem)>,
+    subdirs: Vec<PathBuf>,
     entries: Vec<Entry>,
-    usage: HashMap<PathBuf, HashMap<PathBuf, u64>>,
+    usage: HashMap<usize, HashMap<usize, u64>>,
     cur_entry_idx: usize,
     cur_root_idx: usize,
     //state: State,
@@ -23,12 +24,9 @@ pub struct LazySuccessors {
 
 impl From<&State> for LazySuccessors {
     fn from(state: &State) -> Self {
-        info!("LazySuccessors::from({state:?})");
-        let roots = state
-            .roots
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
+        debug!("LazySuccessors::from({state:?})");
+        let roots = state.roots.clone();
+        let subdirs = state.subdirs.clone();
         let entries = state.entries.clone();
         let usage = state.usage.clone();
         Self {
@@ -36,6 +34,7 @@ impl From<&State> for LazySuccessors {
             cur_entry_idx: 0,
             cur_root_idx: 0,
             roots,
+            subdirs,
             entries,
             usage,
         }
@@ -63,23 +62,24 @@ impl Iterator for LazySuccessors {
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut cur_entry = self.entries.get(self.cur_entry_idx)?;
-        let cur_root = loop {
+        let cur_root_idx = loop {
+            let cur_root_idx = self.cur_root_idx;
             let cur_root = self.roots.get(self.cur_root_idx);
             self.cur_root_idx += 1;
-            if let Some(cur_root) = cur_root {
-                // TODO skip if insufficient space in 'cur_root'
-                if cur_root.1.blocks_available < cur_root.1.blocks(cur_entry.size) {
+            if let Some((cur_root, fs)) = cur_root {
+                // Skip if insufficient space in 'cur_root'
+                if fs.blocks_available < fs.blocks(cur_entry.size) {
                     debug!(
                         "Cannot move {:?} to {:?} ({} of {} blocks available)",
                         cur_entry,
                         cur_root,
-                        cur_root.1.blocks_available,
-                        cur_root.1.blocks(cur_entry.size)
+                        fs.blocks_available,
+                        fs.blocks(cur_entry.size)
                     );
                     continue;
                 }
-                if *cur_root.0 != cur_entry.root {
-                    break cur_root;
+                if cur_root_idx != cur_entry.root_idx {
+                    break cur_root_idx;
                 }
             }
             if cur_root.is_none() {
@@ -90,16 +90,23 @@ impl Iterator for LazySuccessors {
                 self.cur_root_idx = 0;
             }
         };
-        debug!("{:?} {:?} {:?}", cur_entry, cur_root, self.roots);
-        info!(
+        debug!("{:?} {:?} {:?}", cur_entry, cur_root_idx, self.roots);
+        debug!(
             "move {:?} to {:?}",
-            cur_entry
-                .root
-                .join(&cur_entry.subdir)
+            self.roots[cur_entry.root_idx]
+                .0
+                .join(self.subdirs.get(cur_entry.subdir_idx).unwrap())
                 .join(&cur_entry.subpath),
-            cur_root.0.clone()
+            self.roots[cur_root_idx].0.clone()
         );
-        let state = Self::new_state(cur_entry, &self.entries, &self.roots, cur_root, &self.usage);
+        let state = Self::new_state(
+            cur_entry,
+            &self.entries,
+            &self.roots,
+            &self.subdirs,
+            cur_root_idx,
+            &self.usage,
+        );
         Some((state, cur_entry.size))
     }
 }
@@ -109,60 +116,56 @@ impl LazySuccessors {
         entry: &Entry,
         entries: &[Entry],
         roots: &[(PathBuf, FileSystem)],
-        (other_root, other_filesystem): &(PathBuf, FileSystem),
-        usage: &HashMap<PathBuf, HashMap<PathBuf, u64>>,
+        subdirs: &[PathBuf],
+        other_root_idx: usize,
+        usage: &HashMap<usize, HashMap<usize, u64>>,
     ) -> State {
         let mut entries = entries
             .iter()
             .filter(|e| *e != entry)
             .cloned()
             .collect::<Vec<_>>();
-        let effective_size = other_filesystem.effective_size(entry.size);
-        info!(
-            "Candidate: move {:?} to {:?} (cost {} for {:?})",
-            entry.root.join(&entry.subdir).join(entry.subpath.clone()),
-            other_root.join(&entry.subdir).join(entry.subpath.clone()),
-            effective_size,
-            other_filesystem
-        );
         // Modify free blocks in roots
-        let mut roots = roots.iter().cloned().collect::<HashMap<_, _>>();
+        let mut roots = roots.to_vec();
         debug!("original roots: {roots:?}");
-        roots.entry(entry.root.clone()).and_modify(|fs| {
+        {
             // freeing of blocks
-            let freed_blocks = fs.blocks(entry.size);
-            debug!("freed {} blocks from {:?}", freed_blocks, entry.root);
-            fs.blocks_available = freed_blocks;
-        });
-        roots.entry(other_root.to_path_buf()).and_modify(|fs| {
+            let root = roots.get_mut(entry.root_idx).unwrap();
+            let freed_blocks = root.1.blocks(entry.size);
+            debug!("freed {} blocks from {:?}", freed_blocks, root.0);
+            root.1.blocks_available += freed_blocks;
+        }
+        {
             // consumption of blocks
-            let consumed_blocks = fs.blocks(entry.size);
-            debug!("consumed {} blocks from {:?}", consumed_blocks, other_root);
-            fs.blocks_available -= consumed_blocks;
-        });
-        info!("- new roots: {roots:?}");
+            let root = roots.get_mut(other_root_idx).unwrap();
+            let freed_blocks = root.1.blocks(entry.size);
+            debug!("consumed {} blocks from {:?}", freed_blocks, root.0);
+            root.1.blocks_available += freed_blocks;
+        }
+        debug!("- new roots: {roots:?}");
         // Modify usage
-        info!("usage was: {usage:?}");
+        debug!("usage was: {usage:?}");
         let mut usage = usage.to_owned();
         *usage
-            .entry(entry.subdir.to_owned())
+            .entry(entry.subdir_idx)
             .or_default()
-            .entry(entry.root.clone())
+            .entry(entry.root_idx)
             .or_default() -= 1;
         *usage
-            .entry(entry.subdir.to_owned())
+            .entry(entry.subdir_idx)
             .or_default()
-            .entry(other_root.to_path_buf())
+            .entry(other_root_idx)
             .or_default() += 1;
-        info!("usage now: {usage:?}");
+        debug!("usage now: {usage:?}");
         // Resultant state
         let mut entry = entry.to_owned();
-        entry.root = other_root.to_owned();
+        entry.root_idx = other_root_idx;
         entries.push(entry);
 
         State {
-            entries,
             roots,
+            subdirs: subdirs.to_owned(),
+            entries,
             usage,
         }
     }
@@ -187,7 +190,8 @@ mod test {
     #[test]
     fn empty_state_successors() {
         let state = State {
-            roots: HashMap::new(),
+            roots: Vec::new(),
+            subdirs: Vec::new(),
             entries: Vec::new(),
             usage: HashMap::new(),
         };
@@ -201,28 +205,38 @@ mod test {
             .enumerate()
             .map(|(id, n)| (PathBuf::from(n), FileSystem::new(id as u64, 4096, 1, false)))
             .collect();
+        let subdirs = vec![
+            PathBuf::from("A"),
+            PathBuf::from("B"),
+            PathBuf::from("C"),
+            PathBuf::from(""),
+        ];
         let entries = vec![Entry {
             size: 5,
-            root: PathBuf::from("a"),
-            subdir: PathBuf::from(""),
+            root_idx: 0,
+            subdir_idx: 3,
             subpath: PathBuf::from("test"),
         }];
         let usage = entries.iter().fold(
-            HashMap::<PathBuf, HashMap<PathBuf, u64>>::new(),
+            HashMap::<usize, HashMap<usize, u64>>::new(),
             |mut acc, v| {
-                *acc.entry(v.subdir.to_owned())
+                *acc.entry(v.subdir_idx)
                     .or_default()
-                    .entry(v.root.to_owned())
+                    .entry(v.root_idx)
                     .or_default() += 1;
                 acc
             },
         );
         let state = State {
             roots,
+            subdirs,
             entries,
             usage,
         };
-        assert_eq!(1, LazySuccessors::from(&state).count());
+        let r = LazySuccessors::from(&state)
+            .inspect(|s| log::info!("{s:?}"))
+            .count();
+        assert_eq!(1, r);
     }
 
     #[test]
@@ -232,32 +246,39 @@ mod test {
             .enumerate()
             .map(|(id, n)| (PathBuf::from(n), FileSystem::new(id as u64, 4096, 1, false)))
             .collect();
+        let subdirs = vec![
+            PathBuf::from("A"),
+            PathBuf::from("B"),
+            PathBuf::from("C"),
+            PathBuf::from(""),
+        ];
         let entries = vec![
             Entry {
                 size: 5,
-                root: PathBuf::from("a"),
-                subdir: PathBuf::from(""),
+                root_idx: 0,
+                subdir_idx: 3,
                 subpath: PathBuf::from("test"),
             },
             Entry {
                 size: 10,
-                root: PathBuf::from("b"),
-                subdir: PathBuf::from(""),
+                root_idx: 1,
+                subdir_idx: 3,
                 subpath: PathBuf::from("test2"),
             },
         ];
         let usage = entries.iter().fold(
-            HashMap::<PathBuf, HashMap<PathBuf, u64>>::new(),
+            HashMap::<usize, HashMap<usize, u64>>::new(),
             |mut acc, v| {
-                *acc.entry(v.subdir.to_owned())
+                *acc.entry(v.subdir_idx)
                     .or_default()
-                    .entry(v.root.to_owned())
+                    .entry(v.root_idx)
                     .or_default() += 1;
                 acc
             },
         );
         let state = State {
             roots,
+            subdirs,
             entries,
             usage,
         };
@@ -276,44 +297,51 @@ mod test {
                 )
             })
             .collect();
+        let subdirs = vec![
+            PathBuf::from("A"),
+            PathBuf::from("B"),
+            PathBuf::from("C"),
+            PathBuf::from(""),
+        ];
         let entries = vec![
             Entry {
                 size: 10,
-                root: PathBuf::from("a"),
-                subdir: PathBuf::from(""),
+                root_idx: 0,
+                subdir_idx: 3,
                 subpath: PathBuf::from("test"),
             },
             Entry {
                 size: 10,
-                root: PathBuf::from("a"),
-                subdir: PathBuf::from(""),
+                root_idx: 0,
+                subdir_idx: 3,
                 subpath: PathBuf::from("test2"),
             },
             Entry {
                 size: 10,
-                root: PathBuf::from("b"),
-                subdir: PathBuf::from(""),
+                root_idx: 1,
+                subdir_idx: 3,
                 subpath: PathBuf::from("test3"),
             },
             Entry {
                 size: 10,
-                root: PathBuf::from("b"),
-                subdir: PathBuf::from(""),
+                root_idx: 1,
+                subdir_idx: 3,
                 subpath: PathBuf::from("test4"),
             },
         ];
         let usage = entries.iter().fold(
-            HashMap::<PathBuf, HashMap<PathBuf, u64>>::new(),
+            HashMap::<usize, HashMap<usize, u64>>::new(),
             |mut acc, v| {
-                *acc.entry(v.subdir.to_owned())
+                *acc.entry(v.subdir_idx)
                     .or_default()
-                    .entry(v.root.to_owned())
+                    .entry(v.root_idx)
                     .or_default() += 1;
                 acc
             },
         );
         let state = State {
             roots,
+            subdirs,
             entries,
             usage,
         };
@@ -332,44 +360,51 @@ mod test {
                 )
             })
             .collect();
+        let subdirs = vec![
+            PathBuf::from("A"),
+            PathBuf::from("B"),
+            PathBuf::from("C"),
+            PathBuf::from(""),
+        ];
         let entries = vec![
             Entry {
                 size: 10,
-                root: PathBuf::from("a"),
-                subdir: PathBuf::from(""),
+                root_idx: 0,
+                subdir_idx: 3,
                 subpath: PathBuf::from("test"),
             },
             Entry {
                 size: 10,
-                root: PathBuf::from("a"),
-                subdir: PathBuf::from(""),
+                root_idx: 0,
+                subdir_idx: 3,
                 subpath: PathBuf::from("test2"),
             },
             Entry {
                 size: 10,
-                root: PathBuf::from("b"),
-                subdir: PathBuf::from(""),
+                root_idx: 1,
+                subdir_idx: 3,
                 subpath: PathBuf::from("test3"),
             },
             Entry {
                 size: 10,
-                root: PathBuf::from("b"),
-                subdir: PathBuf::from(""),
+                root_idx: 1,
+                subdir_idx: 3,
                 subpath: PathBuf::from("test4"),
             },
         ];
         let usage = entries.iter().fold(
-            HashMap::<PathBuf, HashMap<PathBuf, u64>>::new(),
+            HashMap::<usize, HashMap<usize, u64>>::new(),
             |mut acc, v| {
-                *acc.entry(v.subdir.to_owned())
+                *acc.entry(v.subdir_idx)
                     .or_default()
-                    .entry(v.root.to_owned())
+                    .entry(v.root_idx)
                     .or_default() += 1;
                 acc
             },
         );
         let state = State {
             roots,
+            subdirs,
             entries,
             usage,
         };
@@ -388,44 +423,46 @@ mod test {
                 )
             })
             .collect();
+        let subdirs = vec![PathBuf::from("A"), PathBuf::from("B"), PathBuf::from("C")];
         let entries = vec![
             Entry {
                 size: 10,
-                root: PathBuf::from("a"),
-                subdir: PathBuf::from("A"),
+                root_idx: 0,
+                subdir_idx: 0,
                 subpath: PathBuf::from("test"),
             },
             Entry {
                 size: 10,
-                root: PathBuf::from("a"),
-                subdir: PathBuf::from("B"),
+                root_idx: 0,
+                subdir_idx: 1,
                 subpath: PathBuf::from("test2"),
             },
             Entry {
                 size: 10,
-                root: PathBuf::from("b"),
-                subdir: PathBuf::from("A"),
+                root_idx: 1,
+                subdir_idx: 0,
                 subpath: PathBuf::from("test3"),
             },
             Entry {
                 size: 10,
-                root: PathBuf::from("b"),
-                subdir: PathBuf::from("B"),
+                root_idx: 1,
+                subdir_idx: 1,
                 subpath: PathBuf::from("test4"),
             },
         ];
         let usage = entries.iter().fold(
-            HashMap::<PathBuf, HashMap<PathBuf, u64>>::new(),
+            HashMap::<usize, HashMap<usize, u64>>::new(),
             |mut acc, v| {
-                *acc.entry(v.subdir.to_owned())
+                *acc.entry(v.subdir_idx)
                     .or_default()
-                    .entry(v.root.to_owned())
+                    .entry(v.root_idx)
                     .or_default() += 1;
                 acc
             },
         );
         let state = State {
             roots,
+            subdirs,
             entries,
             usage,
         };

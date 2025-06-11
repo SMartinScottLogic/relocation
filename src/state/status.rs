@@ -15,17 +15,20 @@ use crate::{
 };
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[deprecated]
 pub struct State {
-    pub(crate) roots: HashMap<std::path::PathBuf, FileSystem>,
+    pub(crate) roots: Vec<(std::path::PathBuf, FileSystem)>,
+    pub(crate) subdirs: Vec<PathBuf>,
     pub(crate) entries: Vec<Entry>,
-    pub(crate) usage: HashMap<PathBuf, HashMap<PathBuf, u64>>,
+    // HashMap<subdir_idx, HashMap<root_idx, u64>>,
+    pub(crate) usage: HashMap<usize, HashMap<usize, u64>>,
 }
 
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub struct Entry {
     pub(crate) size: u64,
-    pub(crate) root: PathBuf,
-    pub(crate) subdir: PathBuf,
+    pub(crate) root_idx: usize,
+    pub(crate) subdir_idx: usize,
     pub(crate) subpath: PathBuf,
 }
 
@@ -75,12 +78,22 @@ impl State {
                 let src = a
                     .entries
                     .iter()
-                    .map(|e| e.root.join(&e.subdir).join(&e.subpath))
+                    .map(|e| {
+                        a.roots[e.root_idx]
+                            .0
+                            .join(&a.subdirs[e.subdir_idx])
+                            .join(&e.subpath)
+                    })
                     .collect::<HashSet<_>>();
                 let tgt = b
                     .entries
                     .iter()
-                    .map(|e| e.root.join(&e.subdir).join(&e.subpath))
+                    .map(|e| {
+                        b.roots[e.root_idx]
+                            .0
+                            .join(&b.subdirs[e.subdir_idx])
+                            .join(&e.subpath)
+                    })
                     .collect::<HashSet<_>>();
                 let only_src = src.difference(&tgt).next().unwrap();
                 let only_tgt = tgt.difference(&src).next().unwrap();
@@ -97,85 +110,69 @@ impl State {
     pub fn new_state(
         entry: &Entry,
         entries: &[Entry],
-        roots: &HashMap<PathBuf, FileSystem>,
-        (other_root, other_filesystem): (&PathBuf, &FileSystem),
-        usage: &HashMap<PathBuf, HashMap<PathBuf, u64>>,
+        roots: &[(PathBuf, FileSystem)],
+        subdirs: Vec<PathBuf>,
+        other_root_idx: usize,
+        usage: &HashMap<usize, HashMap<usize, u64>>,
     ) -> State {
         let mut entries = entries
             .iter()
             .filter(|e| *e != entry)
             .cloned()
             .collect::<Vec<_>>();
-        let effective_size = other_filesystem.effective_size(entry.size);
-        debug!(
-            "Candidate: move {:?} to {:?} (cost {} for {:?})",
-            entry.root.join(&entry.subdir).join(entry.subpath.clone()),
-            other_root.join(&entry.subdir).join(entry.subpath.clone()),
-            effective_size,
-            other_filesystem
-        );
+        let effective_size = roots[other_root_idx].1.effective_size(entry.size);
         // Modify free blocks in roots
         let mut roots = roots.to_owned();
         debug!("original roots: {roots:?}");
-        roots.entry(entry.root.clone()).and_modify(|fs| {
+        {
             // freeing of blocks
-            let freed_blocks = fs.blocks(entry.size);
-            debug!("freed {} blocks from {:?}", freed_blocks, entry.root);
-            fs.blocks_available = freed_blocks;
-        });
-        roots.entry(other_root.to_path_buf()).and_modify(|fs| {
+            let root = roots.get_mut(entry.root_idx).unwrap();
+            let freed_blocks = root.1.blocks(entry.size);
+            debug!("freed {} blocks from {:?}", freed_blocks, root.0);
+            root.1.blocks_available += freed_blocks;
+        }
+        {
             // consumption of blocks
-            let consumed_blocks = fs.blocks(entry.size);
-            debug!("consumed {} blocks from {:?}", consumed_blocks, other_root);
-            fs.blocks_available -= consumed_blocks;
-        });
+            let root = roots.get_mut(other_root_idx).unwrap();
+            let freed_blocks = root.1.blocks(entry.size);
+            debug!("consumed {} blocks from {:?}", freed_blocks, root.0);
+            root.1.blocks_available += freed_blocks;
+        }
         debug!("new roots: {roots:?}");
         // Modify usage
         let mut usage = usage.to_owned();
         *usage
-            .entry(entry.subdir.to_owned())
+            .entry(entry.subdir_idx)
             .or_default()
-            .entry(entry.root.clone())
+            .entry(entry.root_idx)
             .or_default() -= 1;
         *usage
-            .entry(entry.subdir.to_owned())
+            .entry(entry.subdir_idx)
             .or_default()
-            .entry(other_root.to_path_buf())
+            .entry(other_root_idx)
             .or_default() += 1;
         // Resultant state
         let mut entry = entry.to_owned();
-        entry.root = other_root.to_owned();
+        entry.root_idx = other_root_idx;
         entries.push(entry);
 
         State {
-            entries,
             roots,
+            subdirs: subdirs.clone(),
+            entries,
             usage,
         }
     }
 
     fn successors(&self) -> Box<dyn Iterator<Item = (State, u64)>> {
         if self.entries.len() > 1 {
-            let successors = LazySuccessors::from(self);
-            info!("successors: {successors:?}");
-            // info!(
-            //     "num successors: {}",
-            //     successors
-            //         .inspect(|(state, cost)| {
-            //             info!("cost: {cost}, state: {state:?}");
-            //         })
-            //         .count()
-            // );
-            // TODO Lazy resolution of successors
-            //panic!("Too many entries");
-            // let successors = LazySuccessors::new(self);
-            Box::new(successors)
+            Box::new(LazySuccessors::from(self))
         } else {
             let mut num_tests = 0_u64;
             let mut result = Vec::new();
             for entry in &self.entries {
-                for (other_root, other_fs) in &self.roots {
-                    if entry.root == *other_root {
+                for (other_root_idx, (other_root, other_fs)) in self.roots.iter().enumerate() {
+                    if entry.root_idx == other_root_idx {
                         continue;
                     }
                     num_tests += 1;
@@ -194,44 +191,39 @@ impl State {
                         .cloned()
                         .collect::<Vec<_>>();
                     let mut new_entry = entry.clone();
-                    new_entry.root = other_root.clone();
+                    new_entry.root_idx = other_root_idx;
                     new_entries.push(new_entry);
 
                     let cost = other_fs.effective_size(entry.size);
-                    debug!(
-                        "{}: Candidate: move {:?} to {:?} (cost {} for {:?})",
-                        num_tests,
-                        entry.root.join(&entry.subdir).join(entry.subpath.clone()),
-                        other_root.join(&entry.subdir).join(entry.subpath.clone()),
-                        cost,
-                        other_fs
-                    );
                     // Modify free blocks in roots
                     let mut roots = self.roots.clone();
-                    roots.entry(entry.root.clone()).and_modify(|fs| {
-                        // Pessimistic freeing of blocks
-                        fs.blocks_available += fs.blocks(entry.size);
-                    });
-                    roots.entry(other_root.clone()).and_modify(|fs| {
-                        // Pessimistic consumption of blocks
-                        fs.blocks_available -= fs.blocks(entry.size);
-                    });
+                    {
+                        // Freeing of blocks
+                        let root = roots.get_mut(entry.root_idx).unwrap();
+                        root.1.blocks_available += root.1.blocks(entry.size);
+                    }
+                    {
+                        // Consumption of blocks
+                        let root = roots.get_mut(other_root_idx).unwrap();
+                        root.1.blocks_available -= root.1.blocks(entry.size);
+                    }
                     // Modify usage
                     let mut usage = self.usage.clone();
                     *usage
-                        .entry(entry.subdir.clone())
+                        .entry(entry.subdir_idx)
                         .or_default()
-                        .entry(entry.root.clone())
+                        .entry(entry.root_idx)
                         .or_default() -= 1;
                     *usage
-                        .entry(entry.subdir.clone())
+                        .entry(entry.subdir_idx)
                         .or_default()
-                        .entry(other_root.clone())
+                        .entry(other_root_idx)
                         .or_default() += 1;
                     // Add new state to results
                     let new_state = State {
-                        entries: new_entries,
                         roots,
+                        subdirs: self.subdirs.clone(),
+                        entries: new_entries,
                         usage,
                     };
                     result.push((new_state, cost));
@@ -248,13 +240,14 @@ impl State {
     fn heuristic(&self) -> u64 {
         let mut total = 0;
         for subdir in self.usage.keys() {
-            let v = self.entries.iter().filter(|e| e.subdir == *subdir).fold(
-                HashMap::new(),
-                |mut acc, entry| {
-                    *acc.entry(&entry.root).or_insert(0_u64) += entry.size;
+            let v = self
+                .entries
+                .iter()
+                .filter(|e| e.subdir_idx == *subdir)
+                .fold(HashMap::new(), |mut acc, entry| {
+                    *acc.entry(entry.root_idx).or_insert(0_u64) += entry.size;
                     acc
-                },
-            );
+                });
             if v.is_empty() {
                 info!("entries: {:?}", self.entries);
                 info!("usage: {:?}", self.usage);
@@ -262,19 +255,28 @@ impl State {
             }
             // Total size of all files within this subpath (over all roots)
             let subpath_total: u64 = v.values().sum();
-            // Minimum cost of moving all files to each root (total within that root, less the overall total)
-            let min_cost = v.values().map(|v| subpath_total - *v).min().unwrap();
+            // Minimum cost of moving all files to each root (total within that root, less the overall total), skipping scratch roots
+            let min_cost = v
+                .iter()
+                .filter(|(k, _)| !self.roots.get(**k).unwrap().1.scratch())
+                .map(|(_, v)| subpath_total - *v)
+                .min()
+                .unwrap();
             total += min_cost;
         }
         total
     }
 
     fn success(&self) -> bool {
-        // TODO Adjust so scratchpad roots are empty
         !self
             .usage
             .iter()
-            .any(|(_subpath, roots)| roots.values().filter(|v| **v != 0).count() > 1)
+            .any(|(_subpath, roots)| {
+                // Scratchpad roots MUST be empty
+                roots.iter().filter(|(k, v)| self.roots.get(**k).unwrap().1.scratch() && **v > 0).inspect(|v| debug!("scratch: {v:?}")).count() > 0 ||
+                // Only one root per subpath holds files
+                roots.values().filter(|v| **v != 0).inspect(|v| debug!("populated root: {v:?}")).count() > 1
+            })
     }
 }
 
@@ -297,23 +299,23 @@ impl AddAssign<&String> for State {
 }
 
 impl State {
-    fn add_entry(&mut self, root: PathBuf, subdir: PathBuf, subpath: PathBuf, size: u64) {
+    fn add_entry(&mut self, root_idx: usize, subdir_idx: usize, subpath: PathBuf, size: u64) {
         *self
             .usage
-            .entry(subdir.clone())
+            .entry(subdir_idx)
             .or_default()
-            .entry(root.clone())
+            .entry(root_idx)
             .or_default() += 1;
         let entry = Entry {
-            root,
-            subdir,
+            root_idx,
+            subdir_idx,
             subpath,
             size,
         };
         self.entries.push(entry);
     }
 
-    fn scan(&mut self, root: &str, is_scratchpad: bool) {
+    pub fn scan(&mut self, root: &str, is_scratchpad: bool) {
         let cur_dir = match std::env::current_dir() {
             Ok(d) => d,
             Err(e) => {
@@ -328,15 +330,16 @@ impl State {
                 return;
             }
         };
-        if self.roots.contains_key(&root) {
+        if self.roots.iter().any(|(p, _)| *p == root) {
             error!("Skipping duplicate scan root: {root:?}");
             return;
         }
         let root_dev_id = root.metadata().unwrap().dev();
-        self.roots.insert(
+        self.roots.push((
             root.clone(),
             FileSystem::from((root.as_path(), is_scratchpad)),
-        );
+        ));
+        let root_idx = self.roots.iter().position(|(p, _)| *p == root).unwrap();
         info!(
             "scan {:?} from {}",
             root,
@@ -395,6 +398,13 @@ impl State {
             } else {
                 PathBuf::from(c.as_os_str())
             };
+            let subdir_idx = match self.subdirs.iter().position(|v| *v == subdir) {
+                Some(idx) => idx,
+                None => {
+                    self.subdirs.push(subdir.clone());
+                    self.subdirs.iter().position(|v| *v == subdir).unwrap()
+                }
+            };
             let subpath = entry.path().strip_prefix(root.join(&subdir)).unwrap();
             let subpath = subpath.to_path_buf();
             debug!(
@@ -413,7 +423,236 @@ impl State {
                     .map_or("[missing]".to_string(), |p| p.display().to_string())
             );
             let size = metadata.size();
-            self.add_entry(root.clone(), subdir, subpath, size);
+            self.add_entry(root_idx, subdir_idx, subpath, size);
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::{collections::HashMap, path::PathBuf};
+
+    use crate::{filesystem::FileSystem, Entry, State};
+
+    #[test]
+    fn success_spread() {
+        let roots = ["a", "b"]
+            .into_iter()
+            .enumerate()
+            .map(|(id, n)| (PathBuf::from(n), FileSystem::new(id as u64, 4096, 0, false)))
+            .collect();
+        let subdirs = vec![PathBuf::from("A"), PathBuf::from("B"), PathBuf::from("C")];
+        let entries = vec![
+            Entry {
+                size: 10,
+                root_idx: 0,
+                subdir_idx: 0,
+                subpath: PathBuf::from("test"),
+            },
+            Entry {
+                size: 10,
+                root_idx: 0,
+                subdir_idx: 1,
+                subpath: PathBuf::from("test2"),
+            },
+            Entry {
+                size: 10,
+                root_idx: 1,
+                subdir_idx: 0,
+                subpath: PathBuf::from("test3"),
+            },
+            Entry {
+                size: 10,
+                root_idx: 1,
+                subdir_idx: 1,
+                subpath: PathBuf::from("test4"),
+            },
+        ];
+        let usage = entries.iter().fold(
+            HashMap::<usize, HashMap<usize, u64>>::new(),
+            |mut acc, v| {
+                *acc.entry(v.subdir_idx)
+                    .or_default()
+                    .entry(v.root_idx)
+                    .or_default() += 1;
+                acc
+            },
+        );
+        let state = State {
+            roots,
+            subdirs,
+            entries,
+            usage,
+        };
+        assert!(!state.success());
+    }
+
+    #[test]
+    fn success_done() {
+        let roots = ["a", "b"]
+            .into_iter()
+            .enumerate()
+            .map(|(id, n)| (PathBuf::from(n), FileSystem::new(id as u64, 4096, 0, false)))
+            .collect();
+        let subdirs = vec![PathBuf::from("A"), PathBuf::from("B"), PathBuf::from("C")];
+        let entries = vec![
+            Entry {
+                size: 10,
+                root_idx: 0,
+                subdir_idx: 0,
+                subpath: PathBuf::from("test"),
+            },
+            Entry {
+                size: 10,
+                root_idx: 1,
+                subdir_idx: 1,
+                subpath: PathBuf::from("test2"),
+            },
+            Entry {
+                size: 10,
+                root_idx: 0,
+                subdir_idx: 0,
+                subpath: PathBuf::from("test3"),
+            },
+            Entry {
+                size: 10,
+                root_idx: 1,
+                subdir_idx: 1,
+                subpath: PathBuf::from("test4"),
+            },
+        ];
+        let usage = entries.iter().fold(
+            HashMap::<usize, HashMap<usize, u64>>::new(),
+            |mut acc, v| {
+                *acc.entry(v.subdir_idx)
+                    .or_default()
+                    .entry(v.root_idx)
+                    .or_default() += 1;
+                acc
+            },
+        );
+        let state = State {
+            roots,
+            subdirs,
+            entries,
+            usage,
+        };
+        assert!(state.success());
+    }
+
+    #[test]
+    fn success_done_scratch() {
+        let roots = ["a", "b", "c"]
+            .into_iter()
+            .enumerate()
+            .map(|(id, n)| {
+                (
+                    PathBuf::from(n),
+                    FileSystem::new(id as u64, 4096, if n == "c" { 1000 } else { 0 }, n == "c"),
+                )
+            })
+            .collect();
+        let subdirs = vec![PathBuf::from("A"), PathBuf::from("B"), PathBuf::from("C")];
+        let entries = vec![
+            Entry {
+                size: 10,
+                root_idx: 0,
+                subdir_idx: 0,
+                subpath: PathBuf::from("test"),
+            },
+            Entry {
+                size: 10,
+                root_idx: 1,
+                subdir_idx: 2,
+                subpath: PathBuf::from("test2"),
+            },
+            Entry {
+                size: 10,
+                root_idx: 0,
+                subdir_idx: 0,
+                subpath: PathBuf::from("test3"),
+            },
+            Entry {
+                size: 10,
+                root_idx: 1,
+                subdir_idx: 1,
+                subpath: PathBuf::from("test4"),
+            },
+        ];
+        let usage = entries.iter().fold(
+            HashMap::<usize, HashMap<usize, u64>>::new(),
+            |mut acc, v| {
+                *acc.entry(v.subdir_idx)
+                    .or_default()
+                    .entry(v.root_idx)
+                    .or_default() += 1;
+                acc
+            },
+        );
+        let state = State {
+            roots,
+            subdirs,
+            entries,
+            usage,
+        };
+        assert!(state.success());
+    }
+
+    #[test]
+    fn success_scratch_used() {
+        let roots = ["a", "b", "c"]
+            .into_iter()
+            .enumerate()
+            .map(|(id, n)| {
+                (
+                    PathBuf::from(n),
+                    FileSystem::new(id as u64, 4096, if n == "c" { 1000 } else { 0 }, n == "c"),
+                )
+            })
+            .collect();
+        let subdirs = vec![PathBuf::from("A"), PathBuf::from("B"), PathBuf::from("C")];
+        let entries = vec![
+            Entry {
+                size: 10,
+                root_idx: 0,
+                subdir_idx: 0,
+                subpath: PathBuf::from("test"),
+            },
+            Entry {
+                size: 10,
+                root_idx: 2,
+                subdir_idx: 2,
+                subpath: PathBuf::from("test2"),
+            },
+            Entry {
+                size: 10,
+                root_idx: 0,
+                subdir_idx: 0,
+                subpath: PathBuf::from("test3"),
+            },
+            Entry {
+                size: 10,
+                root_idx: 1,
+                subdir_idx: 1,
+                subpath: PathBuf::from("test4"),
+            },
+        ];
+        let usage = entries.iter().fold(
+            HashMap::<usize, HashMap<usize, u64>>::new(),
+            |mut acc, v| {
+                *acc.entry(v.subdir_idx)
+                    .or_default()
+                    .entry(v.root_idx)
+                    .or_default() += 1;
+                acc
+            },
+        );
+        let state = State {
+            roots,
+            subdirs,
+            entries,
+            usage,
+        };
+        assert!(!state.success());
     }
 }
