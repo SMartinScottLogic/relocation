@@ -14,7 +14,7 @@ chrono = { version = "0.4.10", default-features = false, features = ["clock", "s
 # A simple to use, efficient, and full-featured Command Line Argument Parser
 clap = { version = "3.2", features = ["derive"] }
 
-walkdir = "2.3.1"      # Recursively walk a directory.
+walkdir = "2.5.0"      # Recursively walk a directory.
 pathfinding = "4.2.0"
 
 # Raw FFI bindings to platform libraries like libc. 
