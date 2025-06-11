@@ -12,7 +12,7 @@ env_logger = "0.10.0"
 # Date and time library for Rust
 chrono = { version = "0.4.10", default-features = false, features = ["clock", "std"] }
 # A simple to use, efficient, and full-featured Command Line Argument Parser
-clap = { version = "3.2", features = ["derive"] }
+clap = { version = "4.1", features = ["derive"] }
 
 walkdir = "2.3.1"      # Recursively walk a directory.
 pathfinding = "4.2.0"
